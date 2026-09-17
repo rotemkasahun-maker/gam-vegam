@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="גם וגם — להמשיך לעבוד, ללמוד ולהתפתח, תוך קרבה לילדים." />
+  <title>גם וגם — לגלות אפשרויות</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#discover" aria-label="גם וגם, דף הבית"><span class="brand-mark">+</span><span>גם וגם</span></a>
+    <button class="avatar" aria-label="פתיחת פרופיל">ר</button>
+  </header>
+
+  <main id="discover" class="page-shell">
+    <section class="intro">
+      <p class="eyebrow">קהילה שמפנה מקום לשני הצדדים</p>
+      <h1>גם לעבוד.<br /><em>גם להיות קרובים.</em></h1>
+      <p class="lede">אפשר להמשיך לעבוד, ללמוד, להתפרנס ולהתפתח — בלי שהורות לילדים קטנים תוציא אותנו מהחיים המקצועיים.</p>
+      <button class="primary wide" data-open-start>מה יעזור לך עכשיו? <span>←</span></button>
+    </section>
+
+    <nav class="filters" aria-label="סינון תוכן">
+      <button class="filter active">הכול</button><button class="filter">יוזמות וקהילה</button><button class="filter">עבודה והתפתחות</button><button class="filter" data-inspiration>השראה</button>
+    </nav>
+
+    <section class="feed" aria-label="אפשרויות בקהילה">
+      <article class="card initiative featured">
+        <div class="card-top"><span class="context">יוזמה · פתח תקווה</span><span class="spark">✦</span></div>
+        <h2>מחפשות עוד 2–3 משפחות לבקרים משותפים</h2>
+        <p>שתי אמהות לילדים בני שנה וחצי עד שלוש רוצות להתחיל רוטציה פעמיים בשבוע.</p>
+        <div class="signals"><span>1.5–3 שנים</span><span>פעמיים בשבוע</span><span>רוטציה</span></div>
+        <button class="text-action" data-join>לשמוע עוד ולהצטרף <span>←</span></button>
+      </article>
+
+      <div class="split-cards">
+        <article class="card compact place"><span class="context">מקום · הוד השרון</span><h3>סטודיו פנוי בבקרים עם חצר קטנה</h3><p>פתוח לקבוצה קבועה.</p><button class="text-action">לבדוק התאמה ←</button></article>
+        <article class="card compact care"><span class="context">חינוך וטיפול · המרכז</span><h3>אשת חינוך מחפשת להצטרף ליוזמה</h3><p>יומיים–שלושה בשבוע.</p><button class="text-action">לראות פרטים ←</button></article>
+      </div>
+
+      <article class="inspiration-card">
+        <div><span class="context">השראה</span><h2>גם שתי משפחות זה מספיק כדי להתחיל.</h2><p>אפשר בבית או בפארק, בלי מקום קבוע ובלי צוות.</p></div>
+        <button class="secondary" data-inspiration>איך זה עובד? <span>←</span></button>
+      </article>
+
+      <article class="card opportunity"><span class="context">עבודה והתפתחות · Hybrid</span><h2>Research Operations · 60%</h2><p>משרה עם גמישות ושילוב בית.</p><div class="signals"><span>מחקר</span><span>חלקית</span><span>היברידית</span></div><button class="text-action">לפרטי המשרה ←</button></article>
+      <article class="action-card"><span class="context">לא מצאת עדיין?</span><h2>ספרי מה יעזור לך — ונחפש אנשים, מקומות והזדמנויות.</h2><button class="primary" data-open-start>להתחיל לחפש <span>←</span></button></article>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="ניווט ראשי"><a class="selected" href="#discover">לגלות</a><a href="#inspiration" data-inspiration>השראה</a><button class="start-button" data-open-start aria-label="להתחיל">＋</button><a href="#mine">שלי</a></nav>
+
+  <div class="scrim" data-close></div>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><button class="close" data-close aria-label="סגירה">×</button><p class="eyebrow">הצעד הראשון יכול להיות קטן</p><h2 id="sheet-title">מה היית רוצה לעשות?</h2><div class="sheet-options"><button><b>🌱 ליצור משהו</b><small>להקים יוזמה או מקום</small></button><button><b>🔎 למצוא משהו</b><small>אנשים, מקום או הזדמנות</small></button><button><b>✨ להציע משהו</b><small>שירות, ידע או שיתוף פעולה</small></button></div></section>
+  <div class="toast" role="status">נשמור את הבחירה שלך להמשך</div>
+  <script src="script.js"></script>
+</body>
+</html>
