@@ -1,0 +1,17 @@
+{
+  "AutomationEvent": {
+    "primary_key": "event_id",
+    "unique": ["dedupe_key"],
+    "fields": ["event_id", "event_type", "occurred_at", "actor_user_id", "target_user_id", "object_type", "object_id", "context_id", "payload", "dedupe_key", "priority", "expires_at", "deep_link", "consent_scope", "eligibility_hints", "processing_status", "processed_at", "created_at"]
+  },
+  "MessageLog": {
+    "primary_key": "message_id",
+    "indexes": ["event_id", "recipient_user_id", "provider_message_id", "dedupe_key"],
+    "fields": ["message_id", "event_id", "recipient_user_id", "channel", "message_type", "template_name", "provider_message_id", "delivery_status", "sent_at", "delivered_at", "read_at", "action_key", "action_outcome", "error_code", "created_at", "updated_at"]
+  },
+  "WebhookReceipt": {
+    "primary_key": "provider_event_id",
+    "unique": ["provider_event_id"],
+    "fields": ["provider_event_id", "provider", "received_at", "signature_valid", "processing_status", "processed_at", "result_reference", "error_code"]
+  }
+}
