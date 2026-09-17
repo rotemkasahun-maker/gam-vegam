@@ -43,3 +43,4 @@ document.addEventListener('click',e=>{if(S.r==='questions'&&e.target.closest('[d
   document.addEventListener('click',e=>{let q=e.target.closest('[data-q]');if(!q)return;let a=q.dataset.q;if(a==='preview')return; if(a==='edit')return create2('create-'+(d?.type||'Initiative').toLowerCase());if(a==='publish')return;},true);
   window.addEventListener('hashchange',()=>{let h=location.hash.slice(1);if(h&&h!==S.r){S.r=h;page()}}); if(location.hash){S.r=location.hash.slice(1)}
 })();
+document.addEventListener('click',e=>{const t=e.target.closest('[data-r="start"]');if(t){e.preventDefault();e.stopImmediatePropagation();window.openStart?.()}},true);
