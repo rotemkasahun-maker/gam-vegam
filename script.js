@@ -6,6 +6,7 @@
   const overlayRoot = document.querySelector('#modal');
   const stateKey = 'gv-foundation-state';
   const routeRegistry = new Set(['discover', 'initiative-detail', 'place-detail', 'offering-detail', 'job']);
+  const pendingVersion = 1;
 
   const seed = {
     initiative: { id: 'initiative-pt', type: 'initiative', eyebrow: 'יוזמה · פתח תקווה', title: 'מחפשות עוד 2–3 משפחות לבקרים משותפים', description: 'שתי אמהות לילדים בני 1.5–3 רוצות להתחיל רוטציה פעמיים בשבוע.', area: 'פתח תקווה' },
@@ -31,12 +32,20 @@
       type: typeof value.type === 'string' ? value.type : null,
       step: typeof value.step === 'string' ? value.step : null,
       answers: isRecord(value.answers) ? value.answers : {},
-      draft: isRecord(value.draft) ? value.draft : null
+      draft: isRecord(value.draft) ? value.draft : null,
+      targetId: typeof value.targetId === 'string' ? value.targetId : null,
+      targetType: typeof value.targetType === 'string' ? value.targetType : null
     };
   };
   const normalizePendingAction = value => {
-    if (!isRecord(value) || typeof value.action !== 'string') return null;
-    return { action: value.action, originRoute: resolveRoute(value.originRoute), payload: isRecord(value.payload) ? value.payload : {} };
+    if (!isRecord(value) || value.version !== pendingVersion || !['join', 'connect'].includes(value.actionType)) return null;
+    if (typeof value.id !== 'string' || typeof value.originRoute !== 'string' || typeof value.createdAt !== 'number') return null;
+    const originRoute = resolveRoute(value.originRoute);
+    if (originRoute === 'discover' && value.originRoute !== 'discover') return null;
+    if (!isRecord(value.originContext) || !isRecord(value.payload) || value.continuation !== value.actionType) return null;
+    const expectedType = value.actionType === 'join' ? 'initiative' : 'offering';
+    if (value.payload.entityType !== expectedType || typeof value.payload.entityId !== 'string') return null;
+    return { id: value.id, actionType: value.actionType, originRoute, originContext: normalizeContext(value.originContext), payload: value.payload, continuation: value.continuation, createdAt: value.createdAt, version: pendingVersion };
   };
   const normalizePersistedState = value => {
     const defaults = initialState();
@@ -46,7 +55,7 @@
       ...defaults,
       route: { name: resolveRoute(isRecord(value.route) ? value.route.name : defaults.route.name) },
       context: normalizeContext(value.context),
-      ui: { overlay: isRecord(value.ui) && value.ui.overlay?.type === 'start' ? { type: 'start' } : null },
+      ui: { overlay: isRecord(value.ui) && ['start', 'account-gate'].includes(value.ui.overlay?.type) ? { type: value.ui.overlay.type } : null },
       auth: { status },
       flow: normalizeFlow(value.flow),
       pendingAction: normalizePendingAction(value.pendingAction)
@@ -66,7 +75,7 @@
   };
 
   const persistState = state => {
-    try { sessionStorage.setItem(stateKey, JSON.stringify({ flow: state.flow, auth: state.auth, pendingAction: state.pendingAction, context: state.context, route: state.route })); } catch (_) { /* memory remains authoritative */ }
+    try { sessionStorage.setItem(stateKey, JSON.stringify({ flow: state.flow, auth: state.auth, pendingAction: state.pendingAction, context: state.context, route: state.route, ui: state.ui })); } catch (_) { /* memory remains authoritative */ }
   };
 
   const transition = patch => {
@@ -115,7 +124,7 @@
     const route = resolveRoute(routeFromLocation());
     const parsed = routeParts(route);
     const context = parsed ? { entityType: parsed.entityType, entityId: parsed.entityId } : { entityType: null, entityId: null };
-    transition({ route: { name: route }, context, ui: { overlay: null }, auth: persisted.auth, flow: persisted.flow, pendingAction: persisted.pendingAction });
+    transition({ route: { name: route }, context, ui: persisted.ui, auth: persisted.auth, flow: persisted.flow, pendingAction: persisted.pendingAction });
     writeLocation(route, true);
     render(appState);
   };
@@ -130,11 +139,16 @@
   const renderDetail = state => {
     const item = seedByTypeAndId(state.context.entityType, state.context.entityId);
     if (!item) return renderDiscover(state);
-    return `<section class="intro detail-view"><button class="text-link" data-action="navigate" data-route="discover">← חזרה לגילוי</button>${heading(item.eyebrow, item.title, item.description)}<div class="detail-meta"><p>${item.area}</p><span>מתאים להורים</span></div></section>`;
+    const protectedAction = item.type === 'initiative' ? actionButton('להצטרף ליוזמה', 'join', ` data-entity-type="${item.type}" data-entity-id="${item.id}"`) : item.type === 'offering' ? actionButton('להתחבר', 'connect', ` data-entity-type="${item.type}" data-entity-id="${item.id}"`) : '';
+    const confirmed = state.flow.step === 'confirmed' && state.flow.targetId === item.id;
+    const confirmation = confirmed ? `<div class="confirmation" role="status"><p class="eyebrow">הפעולה הושלמה</p><h2>${state.flow.type === 'join' ? 'הצטרפת ליוזמה' : 'בקשת החיבור נשלחה'}</h2><p>${item.title}</p></div>` : protectedAction;
+    return `<section class="intro detail-view"><button class="text-link" data-action="navigate" data-route="discover">← חזרה לגילוי</button>${heading(item.eyebrow, item.title, item.description)}<div class="detail-meta"><p>${item.area}</p><span>מתאים להורים</span></div>${confirmation}</section>`;
   };
 
   const renderOverlay = overlay => {
-    if (!overlay || overlay.type !== 'start') return '';
+    if (!overlay) return '';
+    if (overlay.type === 'account-gate') return `<div class="scrim open" data-action="cancel-gate"></div><section class="sheet open account-gate" role="dialog" aria-modal="true"><button class="close" data-action="cancel-gate">×</button>${heading('נדרש חשבון', 'מתחברות כדי להמשיך', 'זהו חשבון הדגמה — ללא פרטים אישיים.')}<div class="sheet-options"><button data-action="demo-auth">להתחבר ולהמשיך</button><button data-action="cancel-gate">ביטול</button></div></section>`;
+    if (overlay.type !== 'start') return '';
     return `<div class="scrim open" data-action="close-overlay"></div><section class="sheet open" role="dialog" aria-modal="true"><button class="close" data-action="close-overlay">×</button>${heading('הצעד הראשון', 'מה היית רוצה לעשות?')}<div class="sheet-options"><button data-action="start-create">🌱 ליצור משהו</button><button data-action="start-find">🔎 למצוא משהו</button><button data-action="start-offer">✨ להציע משהו</button></div></section>`;
   };
 
@@ -160,6 +174,31 @@
       case 'start':
       case 'open-start': transition({ ui: { overlay: { type: 'start' } } }); render(appState); break;
       case 'close-overlay': transition({ ui: { overlay: null } }); render(appState); break;
+      case 'cancel-gate': transition({ ui: { overlay: null }, pendingAction: null }); render(appState); break;
+      case 'join':
+      case 'connect': {
+        const item = seedByTypeAndId(payload.entityType, payload.entityId);
+        const valid = item && ((action === 'join' && item.type === 'initiative') || (action === 'connect' && item.type === 'offering'));
+        if (!valid) break;
+        if (appState.auth.status !== 'authenticated' && !payload.continue) {
+          const originRoute = appState.route.name;
+          transition({ pendingAction: { id: `${action}:${item.id}:${Date.now()}`, actionType: action, originRoute, originContext: { ...appState.context }, payload: { entityType: item.type, entityId: item.id }, continuation: action, createdAt: Date.now(), version: pendingVersion }, ui: { overlay: { type: 'account-gate' } } });
+          render(appState);
+          break;
+        }
+        transition({ ui: { overlay: null }, pendingAction: null, flow: { type: action, step: 'confirmed', targetId: item.id, targetType: item.type } });
+        render(appState);
+        break;
+      }
+      case 'demo-auth': {
+        const pending = normalizePendingAction(appState.pendingAction);
+        if (!pending) { transition({ auth: { status: 'authenticated' }, ui: { overlay: null }, pendingAction: null }); render(appState); break; }
+        const item = seedByTypeAndId(pending.payload.entityType, pending.payload.entityId);
+        if (!item || pending.originRoute !== appState.route.name || pending.originContext.entityType !== appState.context.entityType || pending.originContext.entityId !== appState.context.entityId) { transition({ auth: { status: 'authenticated' }, ui: { overlay: null }, pendingAction: null }); render(appState); break; }
+        transition({ auth: { status: 'authenticated' }, ui: { overlay: null }, pendingAction: null });
+        dispatch(pending.continuation, { ...pending.payload, continue: true }, pending.originContext);
+        break;
+      }
       case 'start-create':
       case 'start-find':
       case 'start-offer':
