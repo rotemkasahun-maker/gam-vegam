@@ -471,6 +471,50 @@ try {
   assert(hash(page) === '#inspiration', 'No Results Inspiration entry did not navigate');
   assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'No Results Inspiration entry had side effects');
 
+  // Slice 6 Mine / downstream: private intent, owned initiative management, and idempotent connection state.
+  await clearSession(page);
+  const mineInitiative = { id: 'created-initiative-mine', type: 'initiative', title: 'יוזמה לניהול', area: 'פתח תקווה', description: 'יוזמה עם צרכים קיימים בלבד.', peopleNeeded: 'עוד שתי משפחות', place: 'חלל משותף', educator: 'אשת חינוך' };
+  const mineIntent = { id: 'intent-1rt9erp', answers: { need: 'initiatives', area: 'פתח תקווה', context: 'mornings' }, private: true, savedAt: 1 };
+  await page.evaluate(({ mineInitiative, mineIntent }) => sessionStorage.setItem('gv-foundation-state', JSON.stringify({
+    auth: { status: 'authenticated' }, route: { name: 'mine' }, createdItems: [mineInitiative], savedIntents: [mineIntent]
+  })), { mineInitiative, mineIntent });
+  await page.goto(`${baseUrl}/#mine`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-testid="mine"]').count() === 1, 'Mine canonical route missing');
+  assert((await text(page)).includes('מה שאני מחפשת') && (await text(page)).includes('היוזמות שלי') && (await text(page)).includes('החיבורים שלי'), 'Mine sections are incomplete');
+  assert(await page.locator('[data-saved-intent-id]').count() === 1 && (await text(page)).includes('גלוי רק לך'), 'Private intent missing or not private');
+  await page.locator('[data-action="open-saved-intent"]').click();
+  assert(hash(page) === `#saved-intent/${mineIntent.id}` && await page.locator('[data-testid="saved-intent-detail"]').count() === 1, 'Saved intent did not open by stable identity');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(hash(page) === `#saved-intent/${mineIntent.id}`, 'Saved intent route did not survive refresh');
+  await page.locator('[data-action="resume-saved-intent"]').click();
+  assert(hash(page) === '#search/results', 'Saved intent did not return to its existing search context');
+  await page.locator('[data-route="mine"]').last().click();
+  await page.locator('[data-action="manage-initiative"]').click();
+  assert(await page.locator('[data-testid="manage-initiative"]').count() === 1, 'Owned initiative management route missing');
+  assert((await text(page)).includes('עוד שתי משפחות') && (await text(page)).includes('חלל משותף') && (await text(page)).includes('אשת חינוך'), 'Initiative management lost known needs');
+  await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="join"]').click();
+  assert(await page.locator('[data-testid="connection-status"]').count() === 1, 'Join downstream status missing');
+  await page.locator('[data-route="mine"]').last().click();
+  assert(await page.locator('[data-connection-id="join:initiative-pt"]').count() === 1, 'My Connections did not retain Join request');
+  await page.locator('[data-action="open-detail"][data-entity-id="initiative-pt"]').click();
+  assert(await page.locator('[data-action="join"]').count() === 0, 'Duplicate Join remained actionable');
+  assert(await page.evaluate(() => window.__foundation.getState().connections.length === 1 && window.__foundation.getState().createdItems.length === 1), 'Join was not idempotent or created an initiative');
+  await page.goto(`${baseUrl}/#manage-initiative/not-owned`, { waitUntil: 'networkidle' });
+  await waitForHash(page, '#discover');
+  assert(hash(page) === '#discover', 'Invalid management route did not recover safely');
+
+  // A place search outside the known availability area must reach recovery, not a fabricated partial match.
+  await openSearch();
+  await chooseSearch('need', 'places');
+  await chooseSearch('area', 'אזור אחר');
+  await chooseSearch('context', 'flexible');
+  assert(hash(page) === '#search/no-results', 'Zero-availability place search did not reach No Results');
+  assert(await page.locator('[data-testid="no-place-recovery"]').count() === 1, 'No Place recovery was not rendered');
+  assert((await text(page)).includes('אין כאן זמינות מאומתת'), 'No Place recovery implied fake availability');
+  await page.locator('[data-action="create-type"][data-create-type="place"]').click();
+  assert(hash(page) === '#create/place', 'No Place recovery did not offer a valid publish path');
+
   if (errors.length) throw new Error(`browser errors detected:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'PASS', baseUrl, entities: entities.map(e => e.id), errors: [] }, null, 2));
 } catch (error) {
