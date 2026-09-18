@@ -371,7 +371,7 @@ try {
   await page.locator('[data-action="publish-search-need"]').click();
   assert(await page.locator('[data-testid="replace-draft-confirm"]').count() === 1, 'Unrelated valid draft was replaced without confirmation');
   assert(await page.evaluate(() => window.__foundation.getState().flow.draft.title === 'טיוטה חשובה'), 'Draft changed before replacement confirmation');
-  await page.locator('[data-action="confirm-publish-search-need"]').click();
+  await page.locator('[data-action="confirm-replace-draft"]').click();
   assert(hash(page) === '#create/post', 'Confirmed draft replacement did not open Post form');
 
   // Incomplete unrelated drafts receive the same deliberate replacement protection.
@@ -401,6 +401,75 @@ try {
   assert(await page.locator('[data-testid="search-q1"]').count() === 1, 'Malformed Search recovery did not render Q1');
   assert(await page.evaluate(() => window.__foundation.getState().savedIntents.length === 0), 'Malformed Search recovery retained invalid intent');
   assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Malformed Search recovery published content');
+
+  // Slice 5 Inspiration checks: curated library, route restoration, editable provenance, and deliberate replacement.
+  await clearSession(page);
+  await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
+  await page.locator('[data-route="inspiration"]').last().click();
+  assert(hash(page) === '#inspiration', 'Top-level Inspiration did not open canonical library');
+  assert(await page.locator('[data-testid="inspiration-library"]').count() === 1, 'Inspiration library missing');
+  assert(await page.locator('[data-inspiration-card-id]').count() >= 5, 'Curated Inspiration library is incomplete');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(hash(page) === '#inspiration' && await page.locator('[data-testid="inspiration-library"]').count() === 1, 'Inspiration library did not survive refresh');
+
+  const modelId = 'care-rotation';
+  await page.locator(`[data-action="open-inspiration"][data-inspiration-model-id="${modelId}"]`).click();
+  assert(hash(page) === `#inspiration/${modelId}`, 'Inspiration model did not open canonical detail');
+  assert(await page.locator(`[data-testid="inspiration-detail"][data-inspiration-model-id="${modelId}"]`).count() === 1, 'Wrong Inspiration model detail rendered');
+  await page.goBack(); await waitForHash(page, '#inspiration');
+  await page.goForward(); await waitForHash(page, `#inspiration/${modelId}`);
+  await page.goto(`${baseUrl}/#inspiration/not-allowed`, { waitUntil: 'networkidle' });
+  await waitForHash(page, '#discover');
+
+  await page.goto(`${baseUrl}/#inspiration/${modelId}`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="request-inspiration-draft"]').click();
+  assert(hash(page) === '#create/initiative', 'Inspiration CTA did not create an Initiative draft');
+  assert(await page.locator('[data-testid="inspiration-provenance"]').count() === 1, 'Inspiration draft provenance missing');
+  assert((await page.locator('[data-field="title"]').inputValue()).includes('רוטציית'), 'Inspiration title was not prefilled');
+  assert(await page.evaluate(() => { const draft = window.__foundation.getState().flow.draft; return draft.createdFrom === 'inspiration' && draft.inspirationModelId === 'care-rotation' && window.__foundation.getState().createdItems.length === 0; }), 'Inspiration draft provenance or no-auto-publish contract failed');
+  await page.locator('[data-field="area"]').fill('רמת גן');
+  await page.locator('[data-field="description"]').fill('טיוטת השראה ערוכה שאפשר לפרסם רק לאחר אישור מפורש.');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(await page.locator('[data-testid="inspiration-provenance"]').count() === 1, 'Inspiration draft did not survive refresh');
+  await page.locator('[data-action="preview-draft"]').click();
+  assert(await page.locator('[data-testid="inspiration-preview-provenance"]').count() === 1, 'Preview lost Inspiration provenance');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Inspiration Preview auto-published');
+  await page.locator('[data-action="edit-draft"]').first().click();
+  assert((await page.locator('[data-field="area"]').inputValue()) === 'רמת גן', 'Inspiration draft was not editable');
+  await page.locator('[data-action="navigate"][data-route="inspiration/care-rotation"]').first().click();
+  assert(hash(page) === '#inspiration/care-rotation', 'Inspiration draft back route is incorrect');
+  await page.locator('[data-action="request-inspiration-draft"]').click();
+  assert(hash(page) === '#create/initiative', 'Reopening same Inspiration model did not restore the existing draft');
+  assert((await page.locator('[data-field="area"]').inputValue()) === 'רמת גן', 'Same Inspiration model replaced edited draft');
+  await page.locator('[data-action="preview-draft"]').click();
+  await page.locator('[data-action="publish-draft"]').click();
+  assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Inspiration publish did not reuse Account Gate');
+  await page.locator('[data-action="demo-auth"]').click();
+  await page.locator('[data-action="navigate"][data-route="mine"]').click();
+  assert(await page.locator('[data-testid="inspiration-created-provenance"]').count() === 1, 'Published Inspiration item lost provenance in My');
+
+  await clearSession(page);
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({
+    route: { name: 'inspiration/care-rotation' },
+    flow: { type: 'place', step: 'form', draft: { id: 'draft-unrelated', type: 'place', title: 'טיוטה אחרת', area: '', description: '' } }
+  })));
+  await page.goto(`${baseUrl}/#inspiration/care-rotation`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="request-inspiration-draft"]').click();
+  assert(await page.locator('[data-testid="replace-draft-confirm"]').count() === 1, 'Unrelated incomplete draft was overwritten by Inspiration');
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.id === 'draft-unrelated'), 'Inspiration changed draft before confirmation');
+  await page.locator('[data-action="close-overlay"]').last().click();
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.id === 'draft-unrelated'), 'Canceling Inspiration replacement lost existing draft');
+
+  await clearSession(page);
+  await page.goto(`${baseUrl}/#search/no-results`, { waitUntil: 'networkidle' });
+  // A valid No Results state is required; use the existing canonical search flow to reach it.
+  await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="open-start"]').click(); await page.locator('[data-action="start-find"]').click();
+  await chooseSearch('need', 'care'); await chooseSearch('area', 'הוד השרון'); await chooseSearch('context', 'flexible');
+  assert(await page.locator('[data-action="navigate"][data-route="inspiration"]').count() === 1, 'No Results missing Inspiration next-best action');
+  await page.locator('[data-action="navigate"][data-route="inspiration"]').click();
+  assert(hash(page) === '#inspiration', 'No Results Inspiration entry did not navigate');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'No Results Inspiration entry had side effects');
 
   if (errors.length) throw new Error(`browser errors detected:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'PASS', baseUrl, entities: entities.map(e => e.id), errors: [] }, null, 2));
