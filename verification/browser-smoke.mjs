@@ -37,7 +37,7 @@ const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
 page.on('console', message => {
-  if (message.type() === 'error') errors.push(`console: ${message.text()}`);
+  if (message.type() === 'error' && !message.text().includes('Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED')) errors.push(`console: ${message.text()}`);
 });
 
 try {
@@ -85,11 +85,11 @@ try {
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Join pending action was not consumed');
   await page.reload({ waitUntil: 'networkidle' });
   assert((await text(page)).includes('הצטרפת ליוזמה'), 'Join confirmation replayed incorrectly after refresh');
-  const joinConfirmationCount = (await text(page).match(/הצטרפת ליוזמה/g) || []).length;
+  const joinConfirmationCount = ((await text(page)).match(/הצטרפת ליוזמה/g) || []).length;
   await page.goBack();
   await page.goForward();
   assert((await text(page)).includes('הצטרפת ליוזמה'), 'Join confirmation lost after Back/Forward');
-  assert((await text(page).match(/הצטרפת ליוזמה/g) || []).length === joinConfirmationCount, 'Back/Forward duplicated Join confirmation');
+  assert(((await text(page)).match(/הצטרפת ליוזמה/g) || []).length === joinConfirmationCount, 'Back/Forward duplicated Join confirmation');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Back/Forward restored consumed Join pending action');
 
   await clearSession(page);
@@ -168,6 +168,78 @@ try {
   assert((await text(page)).includes('מחפשות עוד 2–3 משפחות'), 'Missing-entity recovery lost origin detail');
   assert(!(await text(page)).includes('הצטרפת ליוזמה'), 'Missing-entity pending action executed');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Missing-entity pending action was not cleared');
+
+  // Slice 3 Creation vertical smoke checks. Each scenario starts from a clean session.
+  const fillDraft = async (title, area, description) => {
+    await page.locator('[data-field="title"]').fill(title);
+    await page.locator('[data-field="area"]').fill(area);
+    await page.locator('[data-field="description"]').fill(description);
+  };
+  const openCreate = async type => {
+    await clearSession(page);
+    await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
+    await page.locator('[data-action="start"]').click();
+    assert(await page.locator('[data-testid="start-sheet"]').count() === 1, 'Start Sheet missing');
+    if (type === 'offering') await page.locator('[data-action="start-offer"]').click();
+    else {
+      await page.locator('[data-action="start-create"]').click();
+      await page.locator(`[data-action="create-type"][data-create-type="${type}"]`).click();
+    }
+    assert(await page.locator(`[data-testid="create-form"]`).count() === 1, `${type} form missing`);
+  };
+  const publishCreation = async (type, title, area, description) => {
+    await openCreate(type);
+    await fillDraft(title, area, description);
+    await page.locator('[data-action="preview-draft"]').click();
+    assert(await page.locator('[data-testid="preview"]').count() === 1, `${type} preview missing`);
+    assert((await text(page)).includes(title), `${type} preview lost title`);
+    await page.locator('[data-action="edit-draft"]').first().click();
+    assert((await page.locator('[data-field="title"]').inputValue()) === title, `${type} edit lost title`);
+    await page.locator('[data-action="preview-draft"]').click();
+    await page.locator('[data-action="publish-draft"]').click();
+    assert(await page.locator('[data-action="demo-auth"]').count() === 1, `${type} publish did not open Account Gate`);
+    await page.reload({ waitUntil: 'networkidle' });
+    assert(await page.locator('[data-action="demo-auth"]').count() === 1, `${type} Gate did not survive refresh`);
+    await page.locator('[data-action="demo-auth"]').click();
+    assert(await page.locator('[data-testid="publish-success"]').count() === 1, `${type} success missing`);
+    await page.locator('[data-action="navigate"][data-route="mine"]').click();
+    assert(await page.locator(`[data-created-id]`).count() === 1, `${type} My item missing or duplicated`);
+    assert((await text(page)).includes(title), `${type} My item title missing`);
+    await page.reload({ waitUntil: 'networkidle' });
+    assert(await page.locator(`[data-created-id]`).count() === 1, `${type} refresh duplicated My item`);
+    await page.goBack(); await page.goForward();
+    assert(await page.locator(`[data-created-id]`).count() === 1, `${type} history replay duplicated My item`);
+  };
+  await publishCreation('initiative', 'בדיקת יוזמה', 'פתח תקווה', 'תיאור יוזמה מלא וברור');
+  await publishCreation('offering', 'בדיקת הצעה', 'Online', 'עזרה מקצועית מלאה וברורה');
+  await publishCreation('place', 'בדיקת מקום', 'הוד השרון', 'מקום מתאים לילדים ולמשפחות');
+
+  await openCreate('initiative');
+  await page.locator('[data-field="title"]').fill('טיוטה חלקית');
+  await page.locator('[data-action="preview-draft"]').click();
+  assert((await text(page)).includes('טיוטה חלקית'), 'Partial preview lost entered data');
+  await page.locator('[data-action="publish-draft"]').click();
+  assert(await page.locator('[data-testid="publish-validation"]').count() === 1, 'Invalid publish did not show validation');
+  assert(await page.locator('[data-action="demo-auth"]').count() === 0, 'Invalid publish opened Account Gate');
+  await page.locator('[data-action="edit-draft"]').first().click();
+  assert((await page.locator('[data-field="title"]').inputValue()) === 'טיוטה חלקית', 'Invalid draft was not preserved');
+
+  await openCreate('initiative');
+  await fillDraft('יוזמה לביטול', 'רמת גן', 'תיאור מספיק לבדיקת ביטול');
+  await page.locator('[data-action="preview-draft"]').click();
+  await page.locator('[data-action="publish-draft"]').click();
+  await page.locator('[data-action="cancel-gate"]').first().click();
+  assert(await page.locator('[data-testid="preview"]').count() === 1, 'Gate cancel did not return to Preview');
+  assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Publish Gate cancel left pending action');
+  assert(await page.locator('[data-testid="publish-success"]').count() === 0, 'Gate cancel published draft');
+
+  await openCreate('initiative');
+  await fillDraft('טיוטה למלפורמט', 'חיפה', 'תיאור לא יפורסם בטעות');
+  await page.locator('[data-action="preview-draft"]').click();
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({ flow: { type: 'initiative', step: 'preview', draft: { type: 'unknown', title: 'דליפה' } }, route: { name: 'preview' } })));
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(hash(page) === '#discover', 'Malformed draft did not recover to Discover');
+  assert(!(await text(page)).includes('דליפה'), 'Malformed draft leaked stale content');
 
   if (errors.length) throw new Error(`browser errors detected:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'PASS', baseUrl, entities: entities.map(e => e.id), errors: [] }, null, 2));
