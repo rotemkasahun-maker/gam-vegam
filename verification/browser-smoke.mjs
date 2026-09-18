@@ -224,6 +224,33 @@ try {
   await page.locator('[data-action="edit-draft"]').first().click();
   assert((await page.locator('[data-field="title"]').inputValue()) === 'טיוטה חלקית', 'Invalid draft was not preserved');
 
+  // Privacy & Trust: sensitive public details block publishing, retain the original draft, and do not infer from ordinary age ranges.
+  const privacyCases = [
+    { field: 'description', value: 'לתיאום אפשר לפנות ל-050-123-4567.', expected: 'מספר טלפון' },
+    { field: 'description', value: 'אפשר לכתוב ל-noa@example.com לפרטים.', expected: 'כתובת אימייל' },
+    { field: 'description', value: 'נפגשות ברחוב הרצל 12 בימי רביעי.', expected: 'כתובת רחוב מדויקת' },
+    { field: 'description', value: 'הבת שלי, נועה בת 4, תשמח להצטרף.', expected: 'שם או פרט מזהה של ילד/ה' }
+  ];
+  for (const privacyCase of privacyCases) {
+    await openCreate('initiative');
+    await fillDraft('יוזמה פרטית', 'פתח תקווה', 'תיאור כללי ובטוח לפרסום.');
+    await page.locator(`[data-field="${privacyCase.field}"]`).fill(privacyCase.value);
+    await page.locator('[data-action="preview-draft"]').click();
+    await page.locator('[data-action="publish-draft"]').click();
+    assert(await page.locator('[data-testid="publish-privacy-guardrail"]').count() === 1, `Privacy guardrail missing for ${privacyCase.expected}`);
+    assert((await text(page)).includes(privacyCase.expected), `Privacy guardrail did not explain ${privacyCase.expected}`);
+    assert(await page.locator('[data-action="demo-auth"]').count() === 0, `Sensitive ${privacyCase.expected} opened Account Gate`);
+    await page.locator('[data-action="edit-draft"]').first().click();
+    assert((await page.locator(`[data-field="${privacyCase.field}"]`).inputValue()) === privacyCase.value, `Sensitive ${privacyCase.expected} was silently changed`);
+  }
+  await openCreate('initiative');
+  await fillDraft('יוזמה לגילאים', 'פתח תקווה', 'מחפשות משפחות עם ילדים בני 1.5–3 לבקרים משותפים.');
+  await page.locator('[data-action="preview-draft"]').click();
+  await page.locator('[data-action="publish-draft"]').click();
+  assert(await page.locator('[data-testid="publish-privacy-guardrail"]').count() === 0, 'Ordinary age range was treated as child-identifying detail');
+  assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Ordinary age range did not reach the normal publish Gate');
+  await page.locator('[data-action="cancel-gate"]').first().click();
+
   await openCreate('initiative');
   await fillDraft('יוזמה לביטול', 'רמת גן', 'תיאור מספיק לבדיקת ביטול');
   await page.locator('[data-action="preview-draft"]').click();

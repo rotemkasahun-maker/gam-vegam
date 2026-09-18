@@ -267,12 +267,26 @@
     const provenance = draft.createdFrom === 'search' ? '<p class="privacy-note" data-testid="search-provenance">טיוטה שנוצרה מהחיפוש. היא ניתנת לעריכה ולא תפורסם בלי אישור מפורש.</p>' : draft.createdFrom === 'inspiration' && draft.inspirationModelId ? `<p class="privacy-note" data-testid="inspiration-provenance">טיוטה שנוצרה מהשראה: ${escapeHtml(inspirationModels[draft.inspirationModelId].title)}. היא ניתנת לעריכה ולא תפורסם בלי אישור מפורש.</p>` : '';
     return `<section class="intro creation-view" data-testid="create-form"><button class="text-link" data-action="navigate" data-route="${backRoute}">← ביטול</button>${heading(`יצירת ${draftTypeLabel(draft.type)}`, `יוצרות ${draftTypeLabel(draft.type)}`, 'אפשר לערוך הכול לפני הפרסום.')} ${provenance}<div class="creation-form">${field(draft.type === 'place' ? 'שם המקום' : 'כותרת', 'title', draft.title, false, true)}${field('אזור או Online', 'area', draft.area, false, true)}${field('מה חשוב לדעת', 'description', draft.description, true, true)}${optional}<div class="form-actions">${actionButton('לתצוגה מקדימה', 'preview-draft')}<button class="secondary" data-action="navigate" data-route="${backRoute}">לשמור ולהמשיך אחר כך</button></div></div></section>`;
   };
-  const validateDraft = draft => { const errors = []; if (!draft || !draft.title.trim()) errors.push('צריך להוסיף כותרת.'); if (!draft || !draft.area.trim()) errors.push('צריך להוסיף אזור או לציין Online.'); if (!draft || draft.description.trim().length < 5) errors.push('צריך להוסיף תיאור קצר וברור.'); return errors; };
+  const privacyGuardrailErrors = draft => {
+    const publicText = draftFields.map(fieldName => String(draft?.[fieldName] || '')).join('\n');
+    const errors = [];
+    const hasPhone = /(?:\+972|00972)[\s.-]?5\d[\s.-]?\d{3}[\s.-]?\d{4}|(?:^|[^\d])0(?:2|3|4|8|9|5\d)[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)|\+\d{1,3}[\s.-]?(?:\(?\d{1,4}\)?[\s.-]?)?\d{3,4}[\s.-]\d{4}\b/.test(publicText);
+    const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(publicText);
+    const hasStreetAddress = /(?:רחוב|רח['׳]|שדרות|שד['׳]|סמטה|דרך|street|st\.?|avenue|ave\.?|road|rd\.?)\s+[A-Za-zא-ת"'׳\-\s]{2,60}\s+\d{1,4}[A-Za-zא-ת]?/i.test(publicText);
+    const hasChildIdentity = /(?:הבן|הבת|הילד|הילדה)\s+שלי\s+(?:קוראים\s+לו|קוראים\s+לה|שמו|שמה)\s+[א-ת]{2,}|(?:הבן|הבת|הילד|הילדה)\s+שלי\s*[,:-]?\s+[א-ת]{2,}\s+(?:בן|בת)\s+\d{1,2}\b|(?:ילד|ילדה)\s+בשם\s+[א-ת]{2,}/.test(publicText);
+    if (hasPhone) errors.push('נראה שנכלל מספר טלפון. צריך להסיר אותו או להחליף בתיאור כללי לפני הפרסום.');
+    if (hasEmail) errors.push('נראה שנכללה כתובת אימייל. צריך להסיר אותה או להחליף בתיאור כללי לפני הפרסום.');
+    if (hasStreetAddress) errors.push('נראית כתובת רחוב מדויקת. צריך להסיר אותה או להחליף באזור כללי לפני הפרסום.');
+    if (hasChildIdentity) errors.push('נראה שנכלל שם או פרט מזהה של ילד/ה. צריך להסיר אותו או להכליל את התיאור לפני הפרסום.');
+    return errors;
+  };
+  const validateDraft = draft => { const errors = []; if (!draft || !draft.title.trim()) errors.push('צריך להוסיף כותרת.'); if (!draft || !draft.area.trim()) errors.push('צריך להוסיף אזור או לציין Online.'); if (!draft || draft.description.trim().length < 5) errors.push('צריך להוסיף תיאור קצר וברור.'); return [...errors, ...privacyGuardrailErrors(draft)]; };
   const renderPreview = state => {
     const draft = state.flow.draft;
     if (!draft) return renderDiscover(state);
     const errors = state.flow.validationErrors || [];
-    const errorBlock = errors.length ? `<div class="validation" role="alert" data-testid="publish-validation"><strong>עוד רגע — חסר מידע לפרסום:</strong><ul>${errors.map(error => `<li>${escapeHtml(error)}</li>`).join('')}</ul><p>אפשר לחזור לעריכה ולהשלים את הטיוטה.</p></div>` : '';
+    const hasPrivacyGuardrail = errors.some(error => error.includes('צריך להסיר') || error.includes('צריך להכליל'));
+    const errorBlock = errors.length ? `<div class="validation" role="alert" data-testid="publish-validation"><strong>עוד רגע — צריך לעדכן את הטיוטה לפני הפרסום:</strong>${hasPrivacyGuardrail ? '<p data-testid="publish-privacy-guardrail">כדי לשמור על פרטיות ובטיחות, חזרי לעריכה והסירי או הכלילי פרטים רגישים. הטקסט לא שונה אוטומטית.</p>' : ''}<ul>${errors.map(error => `<li>${escapeHtml(error)}</li>`).join('')}</ul><p>אפשר לחזור לעריכה ולעדכן את הטיוטה.</p></div>` : '';
     const provenance = draft.createdFrom === 'inspiration' && draft.inspirationModelId ? `<p class="privacy-note" data-testid="inspiration-preview-provenance">מבוסס על השראה: ${escapeHtml(inspirationModels[draft.inspirationModelId].title)}</p>` : '';
     return `<section class="intro creation-view" data-testid="preview"><button class="text-link" data-action="edit-draft">← עריכת הטיוטה</button>${heading(`תצוגה מקדימה · ${draftTypeLabel(draft.type)}`, draft.title || 'טיוטה ללא כותרת', draft.description || 'עדיין לא הוספת תיאור.')}${errorBlock}${provenance}<div class="preview-card"><p class="eyebrow">${escapeHtml(draft.area || 'אזור לא הוגדר')}</p><h2>${escapeHtml(draft.title || 'ללא כותרת')}</h2><p>${escapeHtml(draft.description || 'אין עדיין תיאור')}</p>${draft.serviceType ? `<p><strong>סוג ההצעה:</strong> ${escapeHtml(draft.serviceType)}</p>` : ''}${draft.place ? `<p><strong>מקום / שימוש:</strong> ${escapeHtml(draft.place)}</p>` : ''}</div><div class="form-actions">${actionButton('לפרסם', 'publish-draft')}<button class="secondary" data-action="edit-draft">לחזור לעריכה</button></div></section>`;
   };
