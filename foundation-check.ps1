@@ -23,6 +23,13 @@ foreach ($token in $forbidden) {
 if ($source -match '(?i)\bqa\b') { throw 'QA route detected in production shell' }
 if ($source.Contains("'hashchange'")) { throw 'Competing hashchange navigation owner detected' }
 
+foreach ($route in @('initiative-detail', 'place-detail', 'offering-detail', 'job')) {
+  if (-not $source.Contains("'$route'")) { throw "Missing Browse route: $route" }
+}
+if ([regex]::Matches($source, "id: '[^']+', type: '").Count -ne 4) { throw 'Expected four canonical seed entities with stable IDs' }
+if ([regex]::Matches($source, "case 'open-detail'").Count -ne 1) { throw 'Expected one open-detail dispatcher action' }
+if ([regex]::Matches($source, 'data-entity-id').Count -lt 1) { throw 'Browse cards must carry stable entity IDs' }
+
 $automationDiff = git -c safe.directory="$PSScriptRoot" diff --name-only -- automation
 if ($automationDiff) { throw "Protected automation changed: $automationDiff" }
 

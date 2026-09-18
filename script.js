@@ -5,13 +5,13 @@
   const appRoot = document.querySelector('#app');
   const overlayRoot = document.querySelector('#modal');
   const stateKey = 'gv-foundation-state';
-  const routeRegistry = new Set(['discover']);
+  const routeRegistry = new Set(['discover', 'initiative-detail', 'place-detail', 'offering-detail', 'job']);
 
   const seed = {
-    initiative: ['יוזמה · פתח תקווה', 'מחפשות עוד 2–3 משפחות לבקרים משותפים', 'שתי אמהות לילדים בני 1.5–3 רוצות להתחיל רוטציה פעמיים בשבוע.'],
-    place: ['מקום · הוד השרון', 'סטודיו פנוי בבקרים עם חצר קטנה', 'פתוח לקבוצה קבועה.'],
-    offer: ['שירות מקצועי · Online', 'עזרה בסטטיסטיקה לסטודנטיות', 'עזרה מקצועית מרחוק.'],
-    job: ['משרה · Hybrid', 'Research Operations · 60%', 'גמישות ושילוב בית.']
+    initiative: { id: 'initiative-pt', type: 'initiative', eyebrow: 'יוזמה · פתח תקווה', title: 'מחפשות עוד 2–3 משפחות לבקרים משותפים', description: 'שתי אמהות לילדים בני 1.5–3 רוצות להתחיל רוטציה פעמיים בשבוע.', area: 'פתח תקווה' },
+    place: { id: 'place-hod-hasharon', type: 'place', eyebrow: 'מקום · הוד השרון', title: 'סטודיו פנוי בבקרים עם חצר קטנה', description: 'פתוח לקבוצה קבועה.', area: 'הוד השרון' },
+    offer: { id: 'offering-statistics', type: 'offering', eyebrow: 'שירות מקצועי · Online', title: 'עזרה בסטטיסטיקה לסטודנטיות', description: 'עזרה מקצועית מרחוק.', area: 'Online' },
+    job: { id: 'job-research-operations', type: 'job', eyebrow: 'משרה · Hybrid', title: 'Research Operations · 60%', description: 'גמישות ושילוב בית.', area: 'Hybrid' }
   };
 
   const initialState = () => ({ route: { name: 'discover' }, context: { entityType: null, entityId: null }, ui: { overlay: null }, auth: { status: 'anonymous' }, flow: { type: null, step: null, answers: {}, draft: null }, pendingAction: null });
@@ -82,7 +82,18 @@
     return appState;
   };
 
-  const resolveRoute = route => routeRegistry.has(route) ? route : 'discover';
+  const seedByTypeAndId = (type, id) => Object.values(seed).find(item => item.type === type && item.id === id) || null;
+  const routeForEntity = (type, id) => `${type === 'job' ? 'job' : type === 'offering' ? 'offering-detail' : `${type}-detail`}/${id}`;
+  const routeParts = route => {
+    const match = /^([^/]+)\/([^/]+)$/.exec(String(route || ''));
+    if (!match || !routeRegistry.has(match[1])) return null;
+    const type = match[1] === 'offering-detail' ? 'offering' : match[1].replace(/-detail$/, '');
+    return seedByTypeAndId(type, match[2]) ? { name: `${match[1]}/${match[2]}`, entityType: type, entityId: match[2] } : null;
+  };
+  const resolveRoute = route => {
+    if (route === 'discover') return route;
+    return routeParts(route)?.name || 'discover';
+  };
   const routeFromLocation = () => window.location.hash.replace(/^#/, '').trim() || 'discover';
   const writeLocation = (route, replace) => {
     const hash = `#${route}`;
@@ -93,7 +104,8 @@
   const navigate = (requestedRoute, options = {}) => {
     const route = resolveRoute(requestedRoute);
     writeLocation(route, Boolean(options.replace));
-    const context = route === 'discover' ? { entityType: null, entityId: null } : normalizeContext(options.context);
+    const parsed = routeParts(route);
+    const context = parsed ? { entityType: parsed.entityType, entityId: parsed.entityId } : { entityType: null, entityId: null };
     transition({ route: { name: route }, context, ui: { overlay: null } });
     render(appState);
   };
@@ -101,7 +113,8 @@
   const restoreRouteAndContext = () => {
     const persisted = readPersistedState() || initialState();
     const route = resolveRoute(routeFromLocation());
-    const context = route === 'discover' ? { entityType: null, entityId: null } : normalizeContext(persisted.context);
+    const parsed = routeParts(route);
+    const context = parsed ? { entityType: parsed.entityType, entityId: parsed.entityId } : { entityType: null, entityId: null };
     transition({ route: { name: route }, context, ui: { overlay: null }, auth: persisted.auth, flow: persisted.flow, pendingAction: persisted.pendingAction });
     writeLocation(route, true);
     render(appState);
@@ -109,20 +122,26 @@
 
   const renderCard = kind => {
     const item = seed[kind];
-    const route = kind === 'job' ? 'job' : `${kind}-detail`;
-    return `<article class="card ${kind === 'initiative' ? 'featured' : ''}"><span class="context">${item[0]}</span><h2>${item[1]}</h2><p>${item[2]}</p><div class="signals"><span>מתאים להורים</span><span>${kind === 'job' ? 'חלקית' : 'אזור כללי'}</span></div>${actionButton('לפרטים', 'navigate', ` data-route="${route}"`)}</article>`;
+    return `<article class="card ${kind === 'initiative' ? 'featured' : ''}"><span class="context">${item.eyebrow}</span><h2>${item.title}</h2><p>${item.description}</p><div class="signals"><span>מתאים להורים</span><span>${kind === 'job' ? 'חלקית' : 'אזור כללי'}</span></div>${actionButton('לפרטים', 'open-detail', ` data-entity-type="${item.type}" data-entity-id="${item.id}"`)}</article>`;
   };
 
   const renderDiscover = () => `<section class="intro">${heading('קהילה שמפנה מקום לשני הצדדים', 'גם לעבוד.<br><em>גם להיות קרובים.</em>', 'להמשיך לעבוד, ללמוד ולהתפתח — תוך קרבה לילדים.')}${actionButton('מה יעזור לך עכשיו?', 'open-start')}</section><nav class="filters"><button class="filter active" data-action="navigate" data-route="discover">הכול</button><button class="filter" data-action="navigate" data-route="discover">השראה</button><button class="filter" data-action="navigate" data-route="discover">עבודה והתפתחות</button></nav><section class="feed"><div style="grid-column:span 7">${renderCard('initiative')}</div><div class="split-cards"><div class="place">${renderCard('place')}</div><div class="care">${renderCard('offer')}</div></div>${renderCard('job')}<article class="action-card">${heading('לא מצאת עדיין?', 'ספרי מה יעזור לך — ונחפש.')}${actionButton('להתחיל לחפש', 'navigate', ' data-route="discover"')}</article></section>`;
+
+  const renderDetail = state => {
+    const item = seedByTypeAndId(state.context.entityType, state.context.entityId);
+    if (!item) return renderDiscover(state);
+    return `<section class="intro detail-view"><button class="text-link" data-action="navigate" data-route="discover">← חזרה לגילוי</button>${heading(item.eyebrow, item.title, item.description)}<div class="detail-meta"><p>${item.area}</p><span>מתאים להורים</span></div></section>`;
+  };
 
   const renderOverlay = overlay => {
     if (!overlay || overlay.type !== 'start') return '';
     return `<div class="scrim open" data-action="close-overlay"></div><section class="sheet open" role="dialog" aria-modal="true"><button class="close" data-action="close-overlay">×</button>${heading('הצעד הראשון', 'מה היית רוצה לעשות?')}<div class="sheet-options"><button data-action="start-create">🌱 ליצור משהו</button><button data-action="start-find">🔎 למצוא משהו</button><button data-action="start-offer">✨ להציע משהו</button></div></section>`;
   };
 
-  const rendererRegistry = { discover: renderDiscover };
+  const rendererRegistry = { discover: renderDiscover, 'initiative-detail': renderDetail, 'place-detail': renderDetail, 'offering-detail': renderDetail, job: renderDetail };
   const render = state => {
-    const renderer = rendererRegistry[state.route.name] || rendererRegistry.discover;
+    const baseRoute = state.route.name.split('/')[0];
+    const renderer = rendererRegistry[state.route.name] || rendererRegistry[baseRoute] || rendererRegistry.discover;
     appRoot.innerHTML = renderer(state);
     overlayRoot.innerHTML = renderOverlay(state.ui.overlay);
   };
@@ -130,6 +149,14 @@
   const dispatch = (action, payload = {}, context = {}) => {
     switch (action) {
       case 'navigate': navigate(payload.route || 'discover', { context }); break;
+      case 'open-detail': {
+        const type = payload.entityType;
+        const id = payload.entityId;
+        const item = seedByTypeAndId(type, id);
+        if (item) navigate(routeForEntity(type, id), { context: { entityType: type, entityId: id } });
+        else navigate('discover', { replace: true });
+        break;
+      }
       case 'start':
       case 'open-start': transition({ ui: { overlay: { type: 'start' } } }); render(appState); break;
       case 'close-overlay': transition({ ui: { overlay: null } }); render(appState); break;
@@ -148,7 +175,7 @@
     if (!target) return;
     const action = target.dataset.action || 'navigate';
     event.preventDefault();
-    dispatch(action, { route: target.dataset.route || 'discover' }, appState.context);
+    dispatch(action, { route: target.dataset.route || 'discover', entityType: target.dataset.entityType, entityId: target.dataset.entityId }, appState.context);
   };
 
   const initializeState = () => {
