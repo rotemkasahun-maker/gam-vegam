@@ -83,13 +83,18 @@ Require: `Commit → Source SHA → Dist SHA → Publish → Public SHA` verific
 
 The Codex Engineering Orchestrator owns execution of approved implementation slices. For each slice, it scopes the task, dependencies, acceptance checks, and protected areas while applying Context Minimization.
 
+Use the repository-scoped `gam-vegam-slice` Skill as the reusable execution procedure. Its position in the instruction hierarchy is: global user Codex instructions → this `AGENTS.md` contract → `gam-vegam-slice` Skill → current task scope and acceptance. The Skill does not replace this contract or authoritative product sources.
+
 - Use a read-only Architecture/Codebase Analysis subagent only when material architecture or dependency uncertainty exists.
 - Use exactly one Implementation subagent as the sole writer for overlapping production scope.
-- Use an independent read-only Code Review subagent, followed by a read-only Verification subagent, for evidence-based checks appropriate to the task.
+- Use independent read-only Code Review and Verification subagents for evidence-based checks appropriate to the task. Run them in parallel only when their work is independent; otherwise sequence them.
+- Use the repository-scoped Implementer, Reviewer, Verifier, and Browser Verifier roles when they fit the slice. Select the least costly configured role/effort that can reliably provide the required evidence; escalate only with evidence of complexity or failure.
 - Parallelize read-only work when useful; never allow simultaneous writers on overlapping production code.
 - When browser behavior is part of acceptance, use the reusable smoke capability in `verification/browser-smoke.mjs` and `verification/run-browser-smoke.ps1`. Keep it minimal, configurable, and focused on deterministic routing, reload, Back/Forward, deep links, recovery, and known regressions. Public browser evidence is required when acceptance concerns the deployed runtime.
 - Findings from review or verification return automatically to the same Implementation subagent for the smallest focused correction. Repeat review and verification; normal findings do not require Product Lead relay or escalation.
 - Commit only after required review and verification gates pass. Keep implementation and release-only changes separately identifiable where relevant.
+
+After an accepted milestone or release-identity change, update `docs/functional-v1-status.md` from approved handoff and repository evidence. This index is not a product source of truth.
 
 Stop and return to Product Lead when a new product decision is required, authoritative sources conflict, scope would materially expand, the approved Foundation architecture would need to change, a focused correction still fails, protected automation/privacy/data boundaries may be affected, release identity cannot be established, or the next milestone requires independent Product/UX acceptance. Do not stop merely for a normal review finding or focused correction.
 

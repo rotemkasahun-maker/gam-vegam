@@ -1,0 +1,20 @@
+[agents]
+# Two spawned workers allow independent review and verification without
+# competing production writers. The orchestrator is not counted here.
+max_concurrent_threads_per_session = 2
+
+[agents.implementer]
+description = "Sole production-code writer for a scoped Functional V1 slice or focused correction."
+config_file = "agents/implementer.toml"
+
+[agents.reviewer]
+description = "Read-only reviewer for correctness, regressions, and Foundation architecture invariants."
+config_file = "agents/reviewer.toml"
+
+[agents.verifier]
+description = "Read-only verifier for deterministic static checks, tests, and Git or release assertions."
+config_file = "agents/verifier.toml"
+
+[agents.browser_verifier]
+description = "Read-only browser verifier for reusable smoke and public-runtime evidence."
+config_file = "agents/browser-verifier.toml"
