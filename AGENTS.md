@@ -79,6 +79,24 @@ These removals are obligations of the replacement; they must not be described as
 
 Require: `Commit → Source SHA → Dist SHA → Publish → Public SHA` verification. Public-runtime behavior is acceptance evidence for browser flows. Engineering verification precedes independent UX/Product QA.
 
+## Engineering orchestration protocol
+
+The Codex Engineering Orchestrator owns execution of approved implementation slices. For each slice, it scopes the task, dependencies, acceptance checks, and protected areas while applying Context Minimization.
+
+- Use a read-only Architecture/Codebase Analysis subagent only when material architecture or dependency uncertainty exists.
+- Use exactly one Implementation subagent as the sole writer for overlapping production scope.
+- Use an independent read-only Code Review subagent, followed by a read-only Verification subagent, for evidence-based checks appropriate to the task.
+- Parallelize read-only work when useful; never allow simultaneous writers on overlapping production code.
+- When browser behavior is part of acceptance, use the reusable smoke capability in `verification/browser-smoke.mjs` and `verification/run-browser-smoke.ps1`. Keep it minimal, configurable, and focused on deterministic routing, reload, Back/Forward, deep links, recovery, and known regressions. Public browser evidence is required when acceptance concerns the deployed runtime.
+- Findings from review or verification return automatically to the same Implementation subagent for the smallest focused correction. Repeat review and verification; normal findings do not require Product Lead relay or escalation.
+- Commit only after required review and verification gates pass. Keep implementation and release-only changes separately identifiable where relevant.
+
+Stop and return to Product Lead when a new product decision is required, authoritative sources conflict, scope would materially expand, the approved Foundation architecture would need to change, a focused correction still fails, protected automation/privacy/data boundaries may be affected, release identity cannot be established, or the next milestone requires independent Product/UX acceptance. Do not stop merely for a normal review finding or focused correction.
+
+Independent Product/UX QA remains a separate gate for Release Candidates and explicitly requested major product-behavior milestones. It is not a substitute for deterministic engineering/browser verification.
+
+The Orchestrator may retain the broad authoritative bootstrap, but subagents receive only the repository, this contract, the current task or handoff, and task-relevant authoritative material. Do not load the full historical archive into every subagent.
+
 ## Change and handoff
 
 Every substantial implementation handoff records scope, changed files, commit, tests/checks, runtime evidence, known limitations, and unresolved questions. Scope must not be silently expanded.
