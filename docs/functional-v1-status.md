@@ -11,15 +11,15 @@ Machine-friendly engineering index only. It does not replace product sources, ap
 | Accepted | Slice 2 Protected Connection |
 | Accepted | Slice 3 Creation |
 | Accepted | Slice 4 Search & Intent |
-| Next | Slice 5 Inspiration |
+| Accepted | Slice 5 Inspiration |
 | Next | Slice 6 Mine / Downstream |
 | Next | Slice 7 Functional Assembly |
 
 ## Baseline and safeguards
 
-- Latest accepted release: Sites version `23`, asset `release-5f42e7f`.
-- Slice 4 implementation: `5f42e7f0ebf6229b2350a1acd166e09c73cc9977`.
-- Slice 4 release commit: `9901727b17379bb6f5f3cb9eec324121c0d0943d`.
+- Latest accepted release: Sites version `24`, asset `release-14a8651`.
+- Slice 5 implementation: `14a865195367c6e649d4919ac415f1451b390bf2`.
+- Slice 5 release commit: `e0d174c500557e33952a45be99c2eb672e691452`.
 - Reusable engineering infrastructure: `.codex/agents/`, `.codex/config.toml`, and `.agents/skills/gam-vegam-slice/`.
 - Protected during Foundation Replacement: `automation/`.
 - Deferred integrations: real authentication, backend, Meta WhatsApp implementation, payments, internal chat, notifications, and other exclusions in `AGENTS.md`.
