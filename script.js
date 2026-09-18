@@ -46,6 +46,7 @@ document.addEventListener('click',e=>{if(S.r==='questions'&&e.target.closest('[d
   window.addEventListener('hashchange',()=>{let h=location.hash.slice(1);if(h&&h!==S.r){S.r=h;page()}}); if(location.hash){S.r=location.hash.slice(1)}
 })();
 /* PHASE 1 FOUNDATION: one minimal route/state boundary for legacy handlers. */
+/* FOUNDATION RELEASE: 2fd39a0 */
 document.addEventListener=__nativeAddEventListener;window.addEventListener=__nativeWindowAddEventListener;window.__suppressLegacyListeners=false;
 (()=>{
   const stateKey='gv-foundation';
