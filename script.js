@@ -43,4 +43,32 @@ document.addEventListener('click',e=>{if(S.r==='questions'&&e.target.closest('[d
   document.addEventListener('click',e=>{let q=e.target.closest('[data-q]');if(!q)return;let a=q.dataset.q;if(a==='preview')return; if(a==='edit')return create2('create-'+(d?.type||'Initiative').toLowerCase());if(a==='publish')return;},true);
   window.addEventListener('hashchange',()=>{let h=location.hash.slice(1);if(h&&h!==S.r){S.r=h;page()}}); if(location.hash){S.r=location.hash.slice(1)}
 })();
+/* PHASE 1 FOUNDATION: one minimal route/state boundary for legacy handlers. */
+(()=>{
+  const stateKey='gv-foundation';
+  const read=()=>{try{return JSON.parse(sessionStorage.getItem(stateKey)||'{}')}catch(_){return {}}};
+  const write=patch=>{const next={...read(),...patch};sessionStorage.setItem(stateKey,JSON.stringify(next));return next};
+  const navigate=(route,replace=false)=>{
+    const hash='#'+route;
+    if(location.hash!==hash){(replace?history.replaceState:history.pushState).call(history,{},'',hash)}
+    S.r=route;write({route});page();
+  };
+  const restore=()=>{const saved=read();const route=location.hash.slice(1)||saved.route||'discover';S.r=route;page()};
+  document.addEventListener('click',e=>{
+    const t=e.target.closest('[data-r],[data-action]');
+    if(!t)return;
+    const action=t.dataset.action;
+    const route=t.dataset.r||action;
+    if(action==='start'||route==='start')return;
+    if(!route||['publish','connect','join','save'].includes(route))return;
+    if(t.tagName==='BUTTON'&&t.type==='submit')return;
+    e.preventDefault();e.stopImmediatePropagation();
+    write({route,selectedEntity:route.endsWith('-detail')?route:null});
+    navigate(route);
+  },true);
+  window.addEventListener('popstate',restore);
+  window.addEventListener('hashchange',restore);
+  if(location.hash) setTimeout(restore,0);
+  window.__gvFoundation={navigate,read,write,restore};
+})();
 document.addEventListener('click',e=>{const t=e.target.closest('[data-r="start"],[data-action="start"]');if(t){e.preventDefault();e.stopImmediatePropagation();window.openStart?.()}},true);/* build-sync marker */
