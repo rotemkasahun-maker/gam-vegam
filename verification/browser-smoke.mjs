@@ -241,6 +241,167 @@ try {
   assert(hash(page) === '#discover', 'Malformed draft did not recover to Discover');
   assert(!(await text(page)).includes('דליפה'), 'Malformed draft leaked stale content');
 
+  // Slice 4 Search & Intent smoke checks. Search, Saved Intent, and Post remain separate state.
+  const chooseSearch = async (field, value) => page.locator(`[data-action="answer-search"][data-search-field="${field}"][data-search-value="${value}"]`).click();
+  const openSearch = async () => {
+    await clearSession(page);
+    await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
+    await page.locator('[data-action="start"]').click();
+    await page.locator('[data-action="start-find"]').click();
+    assert(hash(page) === '#search/q1', 'Start Sheet Find did not open canonical Search Q1');
+    assert(await page.locator('[data-testid="search-q1"]').count() === 1, 'Search Q1 missing');
+  };
+
+  // A/B/C: full flow, Back preservation, Results, and correct Detail.
+  await openSearch();
+  await chooseSearch('need', 'initiatives');
+  assert(hash(page) === '#search/q2', 'Q1 did not advance to Q2');
+  await chooseSearch('area', 'פתח תקווה');
+  assert(hash(page) === '#search/q3', 'Q2 did not advance to Q3');
+  await page.goBack();
+  await waitForHash(page, '#search/q2');
+  assert(await page.locator('[data-search-field="area"][data-search-value="פתח תקווה"].selected').count() === 1, 'Back to Q2 lost area answer');
+  await page.goBack();
+  await waitForHash(page, '#search/q1');
+  assert(await page.locator('[data-search-field="need"][data-search-value="initiatives"].selected').count() === 1, 'Back to Q1 lost need answer');
+  await page.goForward(); await page.goForward();
+  await waitForHash(page, '#search/q3');
+  await chooseSearch('context', 'mornings');
+  assert(hash(page) === '#search/results', 'Exact search did not reach Results');
+  assert(await page.locator('[data-testid="search-results"]').count() === 1, 'Results state missing');
+  assert(await page.locator('[data-search-result-id="initiative-pt"]').count() === 1, 'Expected deterministic initiative match missing');
+  await page.locator('[data-search-result-id="initiative-pt"] [data-action="open-detail"]').click();
+  assert(hash(page) === '#initiative-detail/initiative-pt', 'Result did not open correct Detail');
+  await page.goBack();
+  await waitForHash(page, '#search/results');
+
+  // D: a category match with mismatched constraints is Partial, not a fabricated exact match.
+  await openSearch();
+  await chooseSearch('need', 'jobs');
+  await chooseSearch('area', 'פתח תקווה');
+  await chooseSearch('context', 'mornings');
+  assert(hash(page) === '#search/partial', 'Mismatched job search did not reach Partial');
+  assert(await page.locator('[data-testid="search-partial"]').count() === 1, 'Partial state missing');
+  assert(await page.locator('[data-search-result-id="job-research-operations"]').count() === 1, 'Partial candidate missing');
+  await openSearch();
+  await chooseSearch('need', 'initiatives');
+  await chooseSearch('area', 'אזור אחר');
+  await chooseSearch('context', 'mornings');
+  assert(hash(page) === '#search/partial', 'Other area incorrectly acted as an exact-match wildcard');
+  assert(await page.locator('[data-testid="search-results"]').count() === 0, 'Other area rendered canonical Results');
+  assert(await page.locator('[data-search-result-id="initiative-pt"]').count() === 1, 'Other area Partial did not retain the relevant category candidate');
+
+  // E/F: unsupported category reaches No Results and editing retains answers.
+  await openSearch();
+  await chooseSearch('need', 'care');
+  await chooseSearch('area', 'הוד השרון');
+  await chooseSearch('context', 'flexible');
+  assert(hash(page) === '#search/no-results', 'Unsupported search did not reach No Results');
+  assert(await page.locator('[data-testid="search-no-results"]').count() === 1, 'No Results state missing');
+  await page.locator('[data-action="edit-search"]').click();
+  assert(hash(page) === '#search/q1', 'Broaden Search did not return to Q1');
+  assert(await page.locator('[data-search-field="need"][data-search-value="care"].selected').count() === 1, 'Broaden Search lost preserved answers');
+  await page.goBack();
+  await waitForHash(page, '#search/no-results');
+
+  // G/H: explicit consent, canonical Gate, consume-once, private My item, refresh/replay idempotency.
+  assert(await page.evaluate(() => window.__foundation.getState().savedIntents.length === 0), 'Search silently created a Saved Intent');
+  await page.locator('[data-action="request-save-intent"]').click();
+  assert(await page.locator('[data-testid="save-intent-consent"]').count() === 1, 'Save Intent consent missing');
+  assert((await text(page)).includes('לא יפורסמו כפוסט'), 'Save Intent privacy explanation missing');
+  await page.locator('[data-action="confirm-save-intent"]').click();
+  assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Save Intent did not reuse Account Gate');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Save Intent Gate did not survive refresh');
+  await page.locator('[data-action="demo-auth"]').click();
+  assert(await page.locator('[data-testid="intent-saved"]').count() === 1, 'Saved Intent confirmation missing');
+  assert(await page.evaluate(() => window.__foundation.getState().savedIntents.length === 1), 'Saved Intent missing or duplicated');
+  assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Save Intent pending action was not consumed');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Saving intent created a public Post');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(await page.evaluate(() => window.__foundation.getState().savedIntents.length === 1), 'Refresh duplicated Saved Intent');
+  await page.locator('[data-route="mine"]').last().click();
+  assert(await page.locator('[data-saved-intent-id]').count() === 1, 'Private Saved Intent missing from My');
+  assert((await text(page)).includes('גלוי רק לך'), 'My did not label Saved Intent private');
+  assert(await page.locator('[data-created-id]').count() === 0, 'Saved Intent appeared as public Post in My');
+  await page.goBack(); await page.goForward();
+  assert(await page.locator('[data-saved-intent-id]').count() === 1, 'History replay duplicated Saved Intent');
+
+  // I/J/K: Search creates an editable prefilled Post draft, preserves provenance, and does not auto-publish.
+  await openSearch();
+  await chooseSearch('need', 'care');
+  await chooseSearch('area', 'אזור אחר');
+  await chooseSearch('context', 'flexible');
+  await page.locator('[data-action="publish-search-need"]').click();
+  assert(hash(page) === '#create/post', 'Publish Need did not open canonical Post draft');
+  assert(await page.locator('[data-testid="search-provenance"]').count() === 1, 'Search draft provenance explanation missing');
+  assert((await page.locator('[data-field="title"]').inputValue()).includes('חינוך וטיפול'), 'Search draft title was not prefilled');
+  assert((await page.locator('[data-field="area"]').inputValue()) === 'אזור אחר', 'Search draft area was not prefilled');
+  const editedSearchDescription = 'מחפשת מסגרת קטנה וגמישה, ואשמח לשמוע על אפשרויות באזור.';
+  await page.locator('[data-field="description"]').fill(editedSearchDescription);
+  await page.reload({ waitUntil: 'networkidle' });
+  assert((await page.locator('[data-field="description"]').inputValue()) === editedSearchDescription, 'Edited Search draft did not survive refresh');
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.createdFrom === 'search'), 'Search draft lost createdFrom provenance');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Search draft published before explicit Publish');
+  await page.locator('[data-action="preview-draft"]').click();
+  assert((await text(page)).includes(editedSearchDescription), 'Preview lost edited Search draft values');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Preview auto-published Search draft');
+  await page.locator('[data-action="edit-draft"]').first().click();
+  assert((await page.locator('[data-field="description"]').inputValue()) === editedSearchDescription, 'Edit after Preview lost Search draft values');
+  await page.locator('[data-action="preview-draft"]').click();
+  await page.locator('[data-action="publish-draft"]').click();
+  assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Explicit Search Post publish did not reuse Account Gate');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Search Post existed before Gate continuation');
+  await page.locator('[data-action="demo-auth"]').click();
+  assert(await page.locator('[data-testid="publish-success"]').count() === 1, 'Search Post explicit publish did not reach success');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 1), 'Search Post explicit publish did not create one item');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems[0].createdFrom === 'search'), 'Published Search Post lost provenance');
+  await page.locator('[data-action="navigate"][data-route="mine"]').click();
+  assert(await page.locator('[data-created-id]').count() === 1, 'Published Search Post missing from My');
+  assert((await text(page)).includes('נוצר מחיפוש'), 'My did not expose Search Post provenance');
+
+  // Deliberate replacement is required for an unrelated valid draft.
+  await clearSession(page);
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({
+    route: { name: 'search/no-results' },
+    search: { answers: { need: 'care', area: 'אזור אחר', context: 'flexible' }, outcome: 'no-results' },
+    flow: { type: 'initiative', step: 'form', draft: { id: 'draft-existing', type: 'initiative', title: 'טיוטה חשובה', area: 'חיפה', description: 'טיוטה תקינה שלא מחליפים בלי אישור' } }
+  })));
+  await page.goto(`${baseUrl}/#search/no-results`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="publish-search-need"]').click();
+  assert(await page.locator('[data-testid="replace-draft-confirm"]').count() === 1, 'Unrelated valid draft was replaced without confirmation');
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.title === 'טיוטה חשובה'), 'Draft changed before replacement confirmation');
+  await page.locator('[data-action="confirm-publish-search-need"]').click();
+  assert(hash(page) === '#create/post', 'Confirmed draft replacement did not open Post form');
+
+  // Incomplete unrelated drafts receive the same deliberate replacement protection.
+  await clearSession(page);
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({
+    route: { name: 'search/no-results' },
+    search: { answers: { need: 'care', area: 'אזור אחר', context: 'flexible' }, outcome: 'no-results' },
+    flow: { type: 'place', step: 'form', draft: { id: 'draft-incomplete', type: 'place', title: 'טיוטה חלקית', area: '', description: '' } }
+  })));
+  await page.goto(`${baseUrl}/?incomplete-draft=1#search/no-results`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="publish-search-need"]').click();
+  assert(await page.locator('[data-testid="replace-draft-confirm"]').count() === 1, 'Incomplete unrelated draft was replaced without confirmation');
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.id === 'draft-incomplete'), 'Incomplete draft changed before replacement confirmation');
+  await page.locator('[data-action="close-overlay"]').last().click();
+  assert(hash(page) === '#search/no-results', 'Canceling incomplete draft replacement changed route');
+  assert(await page.evaluate(() => window.__foundation.getState().flow.draft.id === 'draft-incomplete'), 'Canceling incomplete draft replacement lost draft');
+
+  // L: malformed Search state recovers to the earliest valid canonical step without side effects.
+  await clearSession(page);
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({
+    route: { name: 'search/results' },
+    search: { answers: { need: 'not-valid', area: 42, context: 'mornings' }, outcome: 'results' },
+    savedIntents: [{ id: 'malformed', answers: { need: 'care' } }]
+  })));
+  await page.goto(`${baseUrl}/?malformed-search=1#search/results`, { waitUntil: 'networkidle' });
+  assert(hash(page) === '#search/q1', `Malformed Search state did not recover to Q1: ${hash(page)}`);
+  assert(await page.locator('[data-testid="search-q1"]').count() === 1, 'Malformed Search recovery did not render Q1');
+  assert(await page.evaluate(() => window.__foundation.getState().savedIntents.length === 0), 'Malformed Search recovery retained invalid intent');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems.length === 0), 'Malformed Search recovery published content');
+
   if (errors.length) throw new Error(`browser errors detected:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'PASS', baseUrl, entities: entities.map(e => e.id), errors: [] }, null, 2));
 } catch (error) {
