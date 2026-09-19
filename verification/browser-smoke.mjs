@@ -19,10 +19,10 @@ try {
 
 const { chromium } = playwright;
 const entities = [
-  { type: 'initiative', id: 'initiative-pt', route: 'initiative-detail', marker: 'מחפשות עוד 2–3 משפחות' },
-  { type: 'place', id: 'place-hod-hasharon', route: 'place-detail', marker: 'סטודיו פנוי בבקרים' },
-  { type: 'offering', id: 'offering-statistics', route: 'offering-detail', marker: 'עזרה בסטטיסטיקה' },
-  { type: 'job', id: 'job-research-operations', route: 'job', marker: 'Research Operations' }
+  { type: 'initiative', id: 'initiative-pt', route: 'initiative-detail', marker: 'בקרים שעובדים בפתח תקווה' },
+  { type: 'place', id: 'place-hod-hasharon', route: 'place-detail', marker: 'סטודיו עם חצר קטנה' },
+  { type: 'offering', id: 'offering-statistics', route: 'offering-detail', marker: 'עזרה בסטטיסטיקה בלי להפוך' },
+  { type: 'job', id: 'job-research-operations', route: 'job', marker: 'Research Operations Assistant' }
 ];
 
 const urlFor = entity => `${baseUrl}/#${entity.route}/${entity.id}`;
@@ -80,16 +80,16 @@ try {
   await page.locator('[data-action="join"]').click();
   assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Join did not open Account Gate');
   await page.locator('[data-action="demo-auth"]').click();
-  assert((await text(page)).includes('הצטרפת ליוזמה'), 'Join confirmation missing');
+  assert((await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Join confirmation missing');
   assert((await text(page)).includes(entities[0].marker), 'Join confirmation lost initiative context');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Join pending action was not consumed');
   await page.reload({ waitUntil: 'networkidle' });
-  assert((await text(page)).includes('הצטרפת ליוזמה'), 'Join confirmation replayed incorrectly after refresh');
-  const joinConfirmationCount = ((await text(page)).match(/הצטרפת ליוזמה/g) || []).length;
+  assert((await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Join confirmation replayed incorrectly after refresh');
+  const joinConfirmationCount = ((await text(page)).match(/בקשת ההצטרפות נשלחה/g) || []).length;
   await page.goBack();
   await page.goForward();
-  assert((await text(page)).includes('הצטרפת ליוזמה'), 'Join confirmation lost after Back/Forward');
-  assert(((await text(page)).match(/הצטרפת ליוזמה/g) || []).length === joinConfirmationCount, 'Back/Forward duplicated Join confirmation');
+  assert((await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Join confirmation lost after Back/Forward');
+  assert(((await text(page)).match(/בקשת ההצטרפות נשלחה/g) || []).length === joinConfirmationCount, 'Back/Forward duplicated Join confirmation');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Back/Forward restored consumed Join pending action');
 
   await clearSession(page);
@@ -107,7 +107,7 @@ try {
   await page.locator('[data-action="join"]').click();
   await page.locator('[data-action="cancel-gate"]').first().click();
   assert(hash(page) === `#${entities[0].route}/${entities[0].id}`, 'Gate cancel changed origin route');
-  assert(!(await text(page)).includes('הצטרפת ליוזמה'), 'Gate cancel executed Join');
+  assert(!(await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Gate cancel executed Join');
   assert(await page.evaluate(() => history.length) === cancelHistory, 'Gate cancel polluted history');
 
   await clearSession(page);
@@ -141,7 +141,7 @@ try {
   await page.goto(urlFor(entities[0]), { waitUntil: 'networkidle' });
   await page.locator('[data-action="join"]').click();
   assert(await page.locator('[data-action="demo-auth"]').count() === 0, 'Authenticated direct Join opened Gate');
-  assert((await text(page)).includes('הצטרפת ליוזמה'), 'Authenticated direct Join confirmation missing');
+  assert((await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Authenticated direct Join confirmation missing');
   assert((await text(page)).includes(entities[0].marker), 'Authenticated direct Join lost initiative context');
 
   await clearSession(page);
@@ -150,7 +150,7 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   assert(await page.locator('[data-action="demo-auth"]').count() === 1, 'Malformed pending recovery did not remain deterministic');
   await page.locator('[data-action="demo-auth"]').click();
-  assert(!(await text(page)).includes('הצטרפת ליוזמה'), 'Malformed pending action executed');
+  assert(!(await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Malformed pending action executed');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Malformed pending action was not cleared');
 
   await clearSession(page);
@@ -165,8 +165,8 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('[data-action="demo-auth"]').click();
   assert(await page.locator('[data-action="demo-auth"]').count() === 0, 'Missing-entity pending action left Gate open');
-  assert((await text(page)).includes('מחפשות עוד 2–3 משפחות'), 'Missing-entity recovery lost origin detail');
-  assert(!(await text(page)).includes('הצטרפת ליוזמה'), 'Missing-entity pending action executed');
+  assert((await text(page)).includes('בקרים שעובדים בפתח תקווה'), 'Missing-entity recovery lost origin detail');
+  assert(!(await text(page)).includes('בקשת ההצטרפות נשלחה'), 'Missing-entity pending action executed');
   assert(await page.evaluate(() => window.__foundation.getState().pendingAction === null), 'Missing-entity pending action was not cleared');
 
   // Slice 3 Creation vertical smoke checks. Each scenario starts from a clean session.
@@ -556,7 +556,7 @@ try {
   await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
   assert(await page.locator('[data-entity-id="initiative-pt"]').count() === 0, 'Reported entity remained in Discover');
   await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
-  assert(await page.locator('[data-testid="hidden-entity-recovery"]').count() === 1 && !(await text(page)).includes('מחפשות עוד 2–3'), 'Reported direct link leaked details');
+  assert(await page.locator('[data-testid="hidden-entity-recovery"]').count() === 1 && !(await text(page)).includes('בקרים שעובדים בפתח תקווה'), 'Reported direct link leaked details');
 
   await clearSession(page);
   await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({ auth: { status: 'authenticated' }, route: { name: 'offering-detail/offering-statistics' } })));
