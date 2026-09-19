@@ -67,6 +67,8 @@ try {
     await page.goto(urlFor(entity), { waitUntil: 'networkidle' });
     assert(hash(page) === `#${entity.route}/${entity.id}`, `${entity.id} direct URL failed`);
   }
+  assert(await page.locator('[data-testid="job-outbound-boundary"]').count() === 1, 'Fictional Job did not disclose its external/source boundary');
+  assert((await text(page)).includes('אינה משרה חיה או מאומתת') && await page.locator('[data-testid="job-outbound-boundary"] a[href]').count() === 0, 'Fictional Job exposed a misleading application CTA');
 
   for (const invalid of ['#not-a-route', '#initiative-detail/unknown-entity']) {
     await page.goto(`${baseUrl}/${invalid}`, { waitUntil: 'networkidle' });
@@ -229,7 +231,8 @@ try {
     { field: 'description', value: 'לתיאום אפשר לפנות ל-050-123-4567.', expected: 'מספר טלפון' },
     { field: 'description', value: 'אפשר לכתוב ל-noa@example.com לפרטים.', expected: 'כתובת אימייל' },
     { field: 'description', value: 'נפגשות ברחוב הרצל 12 בימי רביעי.', expected: 'כתובת רחוב מדויקת' },
-    { field: 'description', value: 'הבת שלי, נועה בת 4, תשמח להצטרף.', expected: 'שם או פרט מזהה של ילד/ה' }
+    { field: 'description', value: 'הבת שלי, נועה בת 4, תשמח להצטרף.', expected: 'שם או פרט מזהה של ילד/ה' },
+    { field: 'description', value: 'הילדה בדיקה בת 3, אפשר לפנות אליה בשם בדיקה.', expected: 'שם או פרט מזהה של ילד/ה' }
   ];
   for (const privacyCase of privacyCases) {
     await openCreate('initiative');
@@ -519,6 +522,9 @@ try {
   await page.locator('[data-action="manage-initiative"]').click();
   assert(await page.locator('[data-testid="manage-initiative"]').count() === 1, 'Owned initiative management route missing');
   assert((await text(page)).includes('עוד שתי משפחות') && (await text(page)).includes('חלל משותף') && (await text(page)).includes('אשת חינוך'), 'Initiative management lost known needs');
+  await page.locator('[data-action="set-initiative-need-state"][data-need-key="people"]').click();
+  assert((await text(page)).includes('אנשים:') && (await text(page)).includes('מושהה'), 'Initiative need pause did not update the selected need');
+  assert(await page.evaluate(() => window.__foundation.getState().createdItems[0].needStates.people === 'paused' && window.__foundation.getState().createdItems[0].needStates.place === 'open'), 'Initiative need pause overwrote an unrelated need');
   await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
   await page.locator('[data-action="join"]').click();
   assert(await page.locator('[data-testid="connection-status"]').count() === 1, 'Join downstream status missing');
@@ -539,6 +545,7 @@ try {
   assert(hash(page) === '#search/no-results', 'Zero-availability place search did not reach No Results');
   assert(await page.locator('[data-testid="no-place-recovery"]').count() === 1, 'No Place recovery was not rendered');
   assert((await text(page)).includes('אין כאן זמינות מאומתת'), 'No Place recovery implied fake availability');
+  assert(await page.locator('[data-action="navigate"][data-route="discover"]').filter({ hasText: 'לא עכשיו' }).count() === 1, 'No Results is missing the explicit לא עכשיו escape');
   await page.locator('[data-action="create-type"][data-create-type="place"]').click();
   assert(hash(page) === '#create/place', 'No Place recovery did not offer a valid publish path');
 
