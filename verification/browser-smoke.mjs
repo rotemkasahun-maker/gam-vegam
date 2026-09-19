@@ -542,6 +542,41 @@ try {
   await page.locator('[data-action="create-type"][data-create-type="place"]').click();
   assert(hash(page) === '#create/place', 'No Place recovery did not offer a valid publish path');
 
+  // Privacy P0: report/block are local, idempotent, suppress supported paths, and make stale links safe.
+  await clearSession(page);
+  await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-action="request-report"]').count() === 1 && await page.locator('[data-action="block-entity"]').count() === 1, 'Privacy actions are missing from the public detail');
+  await page.locator('[data-action="request-report"]').click();
+  assert(await page.locator('[data-testid="report-reasons"] button[data-action="confirm-report"]').count() === 6, 'Report reason set is incomplete');
+  await page.locator('[data-action="confirm-report"]').first().click();
+  assert(await page.locator('[data-testid="report-confirm"]').count() === 1, 'Report confirmation missing');
+  assert(await page.evaluate(() => window.__foundation.getState().reports.length === 1), 'Report was not persisted');
+  await page.evaluate(() => window.__foundation.dispatch('confirm-report', { entityType: 'initiative', entityId: 'initiative-pt', reportReason: 'אחר' }));
+  assert(await page.evaluate(() => window.__foundation.getState().reports.length === 1), 'Report was not idempotent');
+  await page.goto(`${baseUrl}/#discover`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-entity-id="initiative-pt"]').count() === 0, 'Reported entity remained in Discover');
+  await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-testid="hidden-entity-recovery"]').count() === 1 && !(await text(page)).includes('מחפשות עוד 2–3'), 'Reported direct link leaked details');
+
+  await clearSession(page);
+  await page.evaluate(() => sessionStorage.setItem('gv-foundation-state', JSON.stringify({ auth: { status: 'authenticated' }, route: { name: 'offering-detail/offering-statistics' } })));
+  await page.goto(`${baseUrl}/#offering-detail/offering-statistics`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="connect"]').click();
+  assert(await page.locator('[data-testid="connection-status"]').count() === 1, 'Privacy setup connection was not created');
+  await page.locator('[data-action="block-entity"]').click();
+  assert(await page.locator('[data-testid="block-confirm"]').count() === 1, 'Block confirmation missing');
+  assert(await page.evaluate(() => { const state = window.__foundation.getState(); return state.blockedEntityIds.length === 1 && state.connections.length === 1 && state.connections[0].status === 'inactive'; }), 'Block did not persist or deactivate the matching connection');
+  await page.evaluate(() => window.__foundation.dispatch('block-entity', { entityType: 'offering', entityId: 'offering-statistics' }));
+  assert(await page.evaluate(() => window.__foundation.getState().blockedEntityIds.length === 1), 'Block was not idempotent');
+  await page.reload({ waitUntil: 'networkidle' });
+  assert(await page.locator('[data-testid="hidden-entity-recovery"]').count() === 1 && await page.locator('[data-action="connect"]').count() === 0, 'Blocked Connect direct link was actionable after refresh');
+  await page.goto(`${baseUrl}/#mine`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-connection-id="connect:offering-statistics"]').count() === 0, 'Blocked connection remained interactive in Mine');
+  await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
+  await page.locator('[data-action="block-entity"]').click();
+  await page.goto(`${baseUrl}/#initiative-detail/initiative-pt`, { waitUntil: 'networkidle' });
+  assert(await page.locator('[data-action="join"]').count() === 0 && await page.locator('[data-testid="hidden-entity-recovery"]').count() === 1, 'Blocked Join context remained actionable');
+
   if (errors.length) throw new Error(`browser errors detected:\n${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'PASS', baseUrl, entities: entities.map(e => e.id), errors: [] }, null, 2));
 } catch (error) {
