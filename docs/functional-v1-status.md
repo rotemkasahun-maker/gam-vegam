@@ -15,10 +15,13 @@ Machine-friendly engineering index only. It does not replace product sources, ap
 | Accepted | Slice 6 Mine / Downstream |
 | Accepted | Slice 7 Functional Assembly |
 | Accepted | Privacy P0 Report / Block |
+| Accepted | Visual P0 — Warm Editorial Utility |
 
 ## Baseline and safeguards
 
-- Latest accepted release: Sites version `27`, asset `release-346cd49`.
+- Latest accepted release: Sites version `28`, asset `release-841ff3a`.
+- Visual P0 implementation: `841ff3aa0d3459696b55eba0f9f392922fcc26d4`.
+- Visual P0 release commit: `a27523342d2c97babf6708dc50f557b5ebb982fa`.
 - Privacy P0 implementation: `346cd496836fdff3f87556d048b0d0a7c8203481`.
 - Privacy P0 release commit: `872ec12cb5157a0c2f49e5e68d8044409620fb5e`.
 - Reusable engineering infrastructure: `.codex/agents/`, `.codex/config.toml`, and `.agents/skills/gam-vegam-slice/`.
